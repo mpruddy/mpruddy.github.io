@@ -1,0 +1,3378 @@
+#
+# GED2HTML output program -- customize to taste
+#
+# Copyright (c) 1998-2000 Eugene W. Stark
+# All rights reserved.
+#
+# Permission is hereby granted to registered users of GED2HTML to
+# make copies and modifications to this code for their own personal
+# use and to distribute such modified copies, provided that this
+# copyright notice is retained on all modified or distributed copies.
+# Any other use of this code is prohibited without written permission.
+#
+
+#---------------------------------------------------------------------
+# The first several definitions in this file are entry points that
+# the output processor expects to be here.  Whatever changes you make,
+# you must leave some sort of definitions here for these routines.
+#---------------------------------------------------------------------
+
+define do_initialize		{ do_initialize_    ; }
+define do_index       i		{ do_index_       i ; }
+define do_surnames    s		{ do_surnames_    s ; }
+define do_individuals i		{ do_individuals_ i ; }
+define do_families    f		{ do_families_    f ; }
+define do_sources     s		{ do_sources_     s ; }
+define do_notes       n		{ do_notes_       n ; }
+define do_gendex      i		{ do_gendex_	  i ; }
+
+#---------------------------------------------------------------------
+# The rest are auxiliary routines used by the above.
+# You can change whatever you want from this point on.
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# INITIALIZATION
+#---------------------------------------------------------------------
+
+# This routine runs *after* the initialization routine from an options
+# file specified in the dialog box or command line, and *before* any
+# GEDCOM is read.
+
+define do_initialize_
+local l lc
+{
+  internationalize ;
+  #
+  # The purpose of the following silliness is to get an English-formatted
+  # date to put in the META elements of the HTML output, without
+  # affecting the previously selected language and locale.
+  #
+  set l to LANGUAGE
+  set lc to LOCALE
+  set LANGUAGE to "English"
+  set METADATE to TODAY
+  set LANGUAGE to l
+  set LOCALE to lc
+}
+
+#---------------------------------------------------------------------
+# PAGE HEADERS AND FOOTERS
+#---------------------------------------------------------------------
+
+# Output the HTML BODY tag, handling colors, images, etc.
+
+define html_body
+{
+  print "<BODY" ,
+  if BACKGROUND_COLOR then
+    print " BGCOLOR=\"" BACKGROUND_COLOR "\"" ,
+  end
+  if BACKGROUND_IMAGE then
+    print " BACKGROUND=\"" BACKGROUND_IMAGE "\"" ,
+  end
+  if TEXT_COLOR then
+    print " TEXT=\"" TEXT_COLOR "\"" ,
+  end
+  if LINK_COLOR then
+    print " LINK=\"" LINK_COLOR "\"" ,
+  end
+  if VISITED_COLOR then
+    print " VLINK=\"" VISITED_COLOR "\"" ,
+  end
+  print ">" ;
+}
+
+# Produce the footer on each HTML page.
+
+define page_footer
+{
+   if HOMEPAGE then
+      print "<P><A HREF=\"" HOMEPAGE "\">" ,
+      print_alternatives HOME_TEXT "HOME" ;
+      print "</A></P>" ;
+   else
+      print "<P></P>" ;
+   end
+   print "<HR>" ;
+   print "<EM>" ,
+   print_alternatives CREATED_BY_TEXT "HTML created by" ;
+   print " <A HREF=\"http://www.gendex.com/ged2html/\">" VERSION "</A> " ,
+   print_alternatives ON_TEXT "on" ;
+   print " " TODAY "</EM>.  " ;
+   print "<HR>" ;
+}
+
+# Output author contact information, if MAILTO is set
+
+define author_contact
+{
+  if MAILTO then
+    print "<P><A HREF=\"mailto:" MAILTO "\">" ,
+    print_alternatives EMAIL_TEXT "EMAIL" ;
+    print "</A>" ;
+    print "<HR></P>" ;
+  else
+    print "<HR>" ;
+  end
+}
+
+# Output the first argument if it is non-NULL, otherwise the second argument.
+# This is used for international customization.
+
+define print_alternatives x y
+{
+  if x then
+    print x ,
+  else
+    print y ,
+  end
+}
+
+#---------------------------------------------------------------------
+# PERSONS INDEX PAGES
+#---------------------------------------------------------------------
+
+# Output a single page of the hierarchical persons index.
+#   Parameter i is head of a list of index nodes to be output
+#   on a single page.
+
+define do_index_ i
+{
+  print "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">" ;
+  print "<HTML>" ;
+  print "<HEAD>" ;
+  print "<TITLE>" ,
+  print "(" ,
+  print_name i.parent.first.name ;
+  print " - " ,
+  print_name i.parent.last.name ;
+  print ")" ,
+  print "</TITLE>" ;
+  if ~OMIT_META then
+    print "<META NAME=\"Description\" content=\"",
+    print_alternatives INDEX_OF_PERSONS_TEXT "Index of Persons" ;
+    print_alternatives COLON_TEXT ": " ;
+    print_name i.parent.first.name ;
+    print " - " ,
+    print_name i.parent.last.name ".  " ;
+    header_info ;
+    print "\">" ;
+    print "<META NAME=\"Keywords\" content=\"" ,
+    print_alternatives INDEX_OF_PERSONS_TEXT "Index of Persons" ;
+    print ", GED2HTML, genealogy\">" ;
+    print "<META NAME=\"Generator\" content=\"" VERSION "\">" ;
+    print "<META NAME=\"Date\" content=\"" METADATE "\">" ;
+    if HEADER.copr then
+      print "<META NAME=\"Copyright\" content=\"" HEADER.copr "\">" ;
+    end
+  end
+  print "</HEAD>" ;
+  html_body ;
+  print "<H2>" ,
+  print_alternatives INDEX_OF_PERSONS_TEXT "Index of Persons" ;
+  print "</H2>" ;
+  if ~(i.parent & i.parent.parent) then
+    print "<EM>" ,
+    header_info ;
+    if HEADER.copr then
+      print "<BR>" HEADER.copr ;
+    end
+    print "</EM>" ;
+    if HEADER.note then
+      print "<P>" ;
+      print_text HEADER.note 0 ;
+      print "</P>" ;
+    end
+    if HEADER.submitter then
+      submitter_info HEADER.submitter ;
+    end
+    author_contact ;
+  end
+  print "<P>" ;
+  while i do
+    if i.children then
+      #
+      # If there are still-lower-level index nodes,
+      # output links to them.
+      #
+      print "<A HREF=\"" i.url "\">" ,
+      print_name i.first.name ;
+      if i.first.title then
+         print " (" i.first.title ")" ,
+      end
+      print_alternatives TO_TEXT " -- to -- " ;
+      print_name i.last.name ;
+      if i.last.title then
+         print " (" i.last.title ")" ,
+      end
+      print "</A><BR>" ;
+    else
+      #
+      # If we have reached a leaf node of the index,
+      # output a link to the corresponding individual data page.
+      #
+      print "<A NAME=\"" i.first.xref "\"></A>" ;
+      print "<A HREF=\"" ,
+      indiv_url i.first ;
+      print "\">" ,
+      print_name i.first.name ;
+      if i.first.living then
+         print "</A>" ,
+      else
+         if i.first.title then
+           print " (" i.first.title ")" ,
+         end
+         print "</A>" ,
+         print " (" ,
+	 birth_and_death i.first ;
+         print ")" ,
+      end
+      print "<BR>" ;
+    end
+    if ~i.next then
+      print "</P>" ;
+      index_links i.parent 0 ;
+    end
+    set i to i.next
+  end
+  print "<P><A HREF=\"" SURNAMES_URL "\">" ,
+  print_alternatives SURNAMES_TEXT "SURNAMES" ;
+  print "</A></P>" ;
+  page_footer ;
+  print "</BODY>" ;
+  print "</HTML>" ;
+}
+
+#
+# Create UP, BACK, and NEXT pointers for navigation within a
+# hierarchical index.
+# The second argument is zero for persons index, nonzero for
+# surnames index
+#
+
+define index_links i which
+local pred succ
+{
+  print "<P>" ;
+  if i then
+    if i.parent then
+      if UP_TEXT then
+        index_link UP_TEXT i.parent which ;
+      else
+        index_link "UP" i.parent which ;
+      end
+    end
+    if i.prev then
+      if BACK_TEXT then
+        index_link BACK_TEXT i.prev which ;
+      else
+        index_link "BACK" i.prev which ;
+      end
+    else
+      set pred to i.pred
+      if pred then
+        if BACK_TEXT then
+          index_link BACK_TEXT i.parent.pred which ;
+        else
+          index_link "BACK" i.parent.pred which ;
+        end
+      end
+    end
+    if i.next then
+      if NEXT_TEXT then
+        index_link NEXT_TEXT i.next which ;
+      else
+        index_link "NEXT" i.next which ;
+      end
+    else
+      set succ to i.succ
+      if succ then
+        if NEXT_TEXT then
+          index_link NEXT_TEXT i.succ which ;
+        else
+          index_link "NEXT" i.succ which ;
+        end
+      end
+    end
+  end
+  print "</P>" ;
+}
+
+# Output a link to a node i in the persons index,
+#   with d as the highlighted text of the link.
+# The third argument is zero for persons index, nonzero for
+# surnames index
+
+define index_link d s which
+{
+  print "<A HREF=\"" s.url "\">" d "</A>" ,
+  print " (" ,
+  if which then
+    emit_surname s.first.surname ;
+    print " - " ,
+    emit_surname s.last.surname ;
+  else
+    print_name s.first.name ;
+    print " - " ,
+    print_name s.last.name ;
+  end
+  print ")<BR>" ;
+}
+
+# Routine that outputs information from the GEDCOM header on
+# each index page.
+
+define header_info
+{
+  print NUMBER_OF_INDIVIDUALS " " ,
+  print_alternatives INDIVIDUALS_TEXT "individuals" ;
+  print ", " NUMBER_OF_FAMILIES " " ,
+  print_alternatives FAMILIES_TEXT "families" ;
+  if HEADER.filename then
+     print " " ,
+     print_alternatives FROM_FILE_TEXT "from file" ;
+     print " " HEADER.filename ,
+     if HEADER.date then
+         print " (" HEADER.date.string ")" ;
+     end
+  end
+}
+
+# Output submitter information from the GEDCOM header
+
+define submitter_info s
+local t
+{
+  if s.name | s.address | s.phone then
+    print "<P><B>" ,
+    print_alternatives AUTHOR_TEXT "Author" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "</B><BR>" ,
+    if s.name & s.name.text then
+      print s.name.text ,
+      print "<BR>" ;
+    end
+    if s.address & s.address.text then
+      set t to s.address.text
+      while t do
+        print t.text ,
+        if t.cont then
+          print ", " ,
+	  set t to t.cont
+	else
+	  set t to t.conc
+	end
+       end
+       print "<BR>" ;
+    end
+    if s.phone & s.phone.text then
+      print s.phone.text ;
+    end
+    print "</P>" ;
+  end
+}
+
+#---------------------------------------------------------------------
+# SURNAMES INDEX PAGES
+#---------------------------------------------------------------------
+
+# Output a single page of the surnames index.
+#   Parameter s is the head of a list of surname index nodes to
+#   be output in a single file.
+
+define do_surnames_ s
+local pred succ
+{
+  print "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">" ;
+  print "<HTML>" ;
+  print "<HEAD>" ;
+  print "<TITLE>" ,
+  print_alternatives INDEX_OF_SURNAMES_TEXT "Index of Surnames" ;
+  print "</TITLE>" ;
+  if ~OMIT_META then
+    print "<META NAME=\"Description\" content=\"" ,
+    print_alternatives INDEX_OF_SURNAMES_TEXT "Index of Surnames" ;
+    print_alternatives COLON_TEXT ": " ;
+    header_info ;
+    print "\">" ;
+    print "<META NAME=\"Keywords\" content=\"Surnames, Index, GED2HTML, genealogy\">" ;
+    print "<META NAME=\"Generator\" content=\"" VERSION "\">" ;
+    print "<META NAME=\"Date\" content=\"" METADATE "\">" ;
+    if HEADER.copr then
+      print "<META NAME=\"Copyright\" content=\"" HEADER.copr "\">" ;
+    end
+  end
+  print "</HEAD>" ;
+  html_body ;
+  print "<H2>" ,
+  print_alternatives INDEX_OF_SURNAMES_TEXT "Index of Surnames" ;
+  print "</H2>" ;
+  if ~(s.parent & s.parent.parent) then
+    print "<EM>" ,
+    header_info ;
+    if HEADER.copr then
+      print "<BR>" HEADER.copr ;
+    end
+    print "</EM>" ;
+    if HEADER.note then
+      print "<P>" ;
+      print_text HEADER.note 0 ;
+      print "</P>" ;
+    end
+    if HEADER.submitter then
+      submitter_info HEADER.submitter ;
+    end
+    author_contact ;
+  end
+  #
+  # If the index consists of a single node, and we haven't been
+  # asked to produce a hierarchical index, then use "alphabet tab" format
+  #
+  if ~s.children & SURNAME_WIDTH = 0 & ~NO_ALPHABET_TABS then
+    do_alphabetical s ;
+  #
+  # Otherwise use the more general hierarchical format
+  #
+  else
+    print "<P>" ;
+    while s do
+      if s.children then		# Internal node of hierarchical index
+					# emit index tabs to lower levels
+        print "<A HREF=\"" s.url "\">" ;
+        emit_surname s.first.surname ;
+        print_alternatives TO_TEXT "  -- to -- " ;
+        emit_surname s.last.surname ;
+        print "</A><BR>" ;
+      else				# Leaf node of hierarchical index
+					# emit links to persons index
+        print "<A HREF=\"" s.index.url "#" s.first.xref "\">" ,
+        emit_surname s.first.surname ;
+        print "</A>" ,
+        if s.next then
+          print "," ;
+        else
+          print ;
+        end
+      end
+      if ~s.next then
+        print "</P>" ;
+        index_links s.parent 1 ;
+      end
+      set s to s.next
+    end
+  end
+  print "<P><A HREF=\"" PERSONS_URL "\">" ,
+  print_alternatives INDEX_TEXT "INDEX" ;
+  print "</A></P>" ;
+  page_footer ;
+  print "</BODY>" ;
+  print "</HTML>" ;
+}
+
+# Produce an "alphabet tab" style surnames index page.
+
+define do_alphabetical s
+local tabs l n
+{
+   set tabs to "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
+   print "<H3>" ;
+   for l in tabs do
+     print "<A HREF=\"#" l "\">" l "</A>" ;
+   end
+   print "</H3>" ;
+   for l in tabs do
+     if s & s.first then
+       print "<P>" ;
+       while s & s.first & (~s.first.surname | s.first.surname < l) do
+          print "<A HREF=\"" s.index.url "#" s.first.xref "\">" ,
+          emit_surname s.first.surname ;
+          print "</A>" ,
+          set n to s.succ
+          if n & n.first then
+            if n.first.surname & n.first.surname < l then
+              print "," ;
+            else
+              print "<BR>" ;
+            end
+          else
+            print ;
+          end
+          set s to n
+       end
+       print "</P>" ;
+     end
+     print "<A NAME=\"" l "\"></A>" ;
+   end
+   if s then
+     print "<P>" ;
+     while s do
+        print "<A HREF=\"" s.index.url "#" s.first.xref "\">" ,
+        emit_surname s.first.surname ;
+        print "</A>" ,
+        set n to s.succ
+        if n then
+          print "," ;
+        else
+          print ;
+        end
+        set s to n
+     end
+     print "</P>" ;
+   end
+}
+
+# Routine for outputting a link to a node s in the surnames index,
+# with d as the highlighted text of the link.
+
+define surname_link d s
+{
+  print "<A HREF=\"" s.url "\">" d "</A>" ,
+  print " (" ,
+  emit_surname s.first.surname ;
+  print " - " ,
+  emit_surname s.last.surname ;
+  print "</A>)<BR>" ;
+}
+
+# Routine for outputting either ??? or a surname.
+
+define emit_surname s
+{
+   if s then
+     print s ,
+   else
+     print "???" ,
+   end
+}
+
+#---------------------------------------------------------------------
+# INDIVIDUALS PAGES
+#---------------------------------------------------------------------
+
+# Output a page of individuals.
+#   Parameter i is head of a list of individuals to be output
+#   in a single page.
+
+define do_individuals_ i
+local ii ok
+{
+  # If we are doing family group sheet output, then we only output
+  # something if there is an individual in the list who doesn't belong
+  # to any family group.  So, scan for this first.
+
+  set ok to 0
+  set ii to i
+  if FAMILY_GROUPS then
+    while ii & ~ok do
+      if ~ii.families & ~ii.marriages then
+        set ok to 1
+      end
+      set ii to ii.next
+    end
+  else
+    set ok to 1
+  end
+  if ok then
+    print "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">" ;
+    print "<HTML>" ;
+    print "<HEAD>" ;
+    print "<TITLE>" ,
+    print i.xref ": " ,
+    print_name i.name ;
+    if i.title then
+      print " (" i.title ")" ;
+    end
+    if ~i.living then
+      print " (" ,
+      birth_and_death i ;
+      print ")" ;
+    end
+    print "</TITLE>" ;
+    if ~OMIT_META then
+      print "<META NAME=\"Description\" content=\"" ,
+      if i.title then
+        print i.title ;
+      end
+      print_name i.name ;
+      if ~i.living then
+        print " (" ,
+        birth_and_death i ;
+        print ")" ,
+      end
+      print "\">" ;
+      print "<META NAME=\"Keywords\" content=\"",
+      print_name i.name ;
+      print ", GED2HTML, genealogy\">" ;
+      print "<META NAME=\"Generator\" content=\"" VERSION "\">" ;
+      print "<META NAME=\"Date\" content=\"" METADATE "\">" ;
+    end
+    print "</HEAD>" ;
+    html_body ;
+    while i do
+      # If we are doing family-group-style output, then only output
+      # an individual if they don't have any family.
+      if ~FAMILY_GROUPS | (~i.families & ~i.marriages) then
+        if i.living then
+          do_living i ;
+        else
+          do_individual i ;
+        end
+      end
+      set i to i.next
+    end
+    print "</BODY>" ;
+    print "</HTML>" ;
+  end
+}
+
+# Routine for outputting the data on an individual page for which
+# the individual is flagged as "living".
+
+define do_living i
+{
+  print "<H2><A NAME=\"" i.xref "\">" ,
+  print_name i.name ;
+  print "</A></H2>" ;
+  do_note i.living 1 ;
+  print "<P><A HREF=\"" PERSONS_URL "\">" ;
+  print_alternatives INDEX_TEXT "INDEX" ;
+  print "</A></P>" ;
+}
+
+# Routine for outputting the data on an individual page for which
+# the individual is not flagged as "living".
+
+define do_individual i
+local br fn s e a r f c n o ip
+{
+  print "<H2><A NAME=\"" i.xref "\"></A>" ,
+  print_name i.name ;
+  if i.title then
+    print " (" i.title ")" ,
+  end
+  print "</H2>" ;
+  set ip to INCLUDE_PATH ^ i.xref ^ INCLUDE_IMAGE_EXT
+  if ip.exists then
+    include ip
+  end
+  if i.name & i.name.notes then
+    for n in i.name.notes do
+       do_note n 0 ;
+    end
+  end
+  if i.notes then
+    for n in i.notes do
+       do_note n 0 ;
+    end
+  end
+  for s in i.sources do
+     source_link s ;
+  end
+  print "<H3>" ,
+  birth_and_death i;
+  print "</H3>" ;
+  if i.events | i.attributes | (i.names & i.names.next) | i.rfn
+	| i.afn | i.refns | i.rin | i.ordinances then
+    print "<UL>" ;
+    if i.names & i.names.next then
+      for n in i.names.next do
+        do_name n 1 ;
+      end
+    end
+    if i.attributes then
+      for a in i.attributes do
+	do_attr a 1 ;
+      end
+    end
+    if i.events then
+      for e in i.events do
+        do_event e 1 ;
+      end
+    end
+    if i.ordinances & ~NO_LDS_ORDINANCES then
+      for o in i.ordinances do
+        do_ordn o 1 ;
+      end
+    end
+    if i.rfn then
+      do_attr i.rfn 1 ;
+    end
+    if i.afn then
+      do_attr i.afn 1 ;
+    end
+    if i.refns then
+      for r in i.refns do
+        do_refn r 1 ;
+      end
+    end
+    if i.rin then
+      do_attr i.rin 1 ;
+    end
+    print "</UL>" ;
+  end
+  set br to 0
+  if i.father then
+    set br to 1
+    print "<B>" ,
+    print_alternatives FATHER_TEXT "Father" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "</B> <A HREF=\"" i.father.url "\">" ,
+    print_name i.father.name ;
+    print "</A><BR>" ;
+  end
+  if i.mother then
+    set br to 1
+    print "<B>" ,
+    print_alternatives MOTHER_TEXT "Mother" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "</B> <A HREF=\"" i.mother.url "\">" ,
+    print_name i.mother.name ;
+    print "</A><BR>" ;
+  end
+  if br then
+    print "<BR>" ;
+  end
+  set fn to 1
+  for f in i.marriages do
+    print "<B>" ,
+    print_alternatives FAMILY_TEXT "Family" ;
+    print " " fn "</B>" ;
+    print_alternatives COLON_TEXT ": " ;
+    if f.wife & ~(f.wife = i) then
+        print "<A HREF=\"" f.wife.url "\">" ,
+        print_name f.wife.name ;
+        print "</A>" ;
+    end
+    if f.husband & ~(f.husband = i) then
+        print "<A HREF=\"" f.husband.url "\">" ,
+        print_name f.husband.name ;
+        print "</A>" ;
+    end
+    if f.events | f.ordinances | f.refns | f.rin then
+      print "<UL>" ;
+      for e in f.events do
+        do_event e 1 ;
+      end
+      if ~NO_LDS_ORDINANCES then
+        for o in f.ordinances do
+          do_ordn o 1 ;
+        end
+      end
+      for r in f.refns do
+        do_refn r 1 ;
+      end
+      if f.rin then
+        do_attr f.rin 1 ;
+      end
+      print "</UL>" ;
+    end
+    if f.children then
+      print "<OL>" ;
+      for c in f.children do
+	print "<LI> " ,
+	child_had_issue c ;
+        print "<A HREF=\"" c.url "\">" ,
+        print_name c.name ;
+        print "</A>" ;
+      end
+      print "</OL>" ;
+    else
+      print "<BR>" ;
+    end
+    set fn to fn+1
+  end
+  if i.father | i.mother then
+    print "<HR>" ;
+    pedigree i ;
+    print "<HR>" ;
+  end
+  print "<P><A HREF=\"" PERSONS_URL "\">" ,
+  print_alternatives INDEX_TEXT "INDEX" ;
+  print "</A></P>" ;
+  #
+  # Emit all notes and sources associated with this individual.
+  #
+  indiv_notes i 1 ;
+  for f in i.marriages do
+    family_notes f 1 ;
+  end
+  indiv_sources i 1 ;
+  for f in i.marriages do
+    family_sources f 1 ;
+  end
+  set ip to INCLUDE_PATH ^ i.xref ^ INCLUDE_INFO_EXT
+  if ip.exists then
+    include ip
+  end
+  page_footer ;
+}
+
+# Output birth and death information for an individual.
+
+define birth_and_death i
+{
+  if i.birth | i.death then
+    if i.birth & i.birth.date then
+      print i.birth.date.string  ,
+    else
+      print "____" ,
+    end
+    print " - " ,
+    if i.death & i.death.date then
+      print i.death.date.string ,
+    else
+      print "____" ,
+    end
+  else
+    print "____ - ____" ,
+  end
+}
+
+# Routine for outputting a name structure
+# If "item" is nonzero, then an HTML <LI> is output,
+# together with the GEDCOM tag associated with the attribute.
+
+define do_name n item
+local s nn
+{
+  if item then
+    print "<LI><EM>" n.tagname.upper "</EM>: " ,
+  end
+  if n.fullname then
+    print n.fullname ;
+  end
+  for nn in n.notes do
+     do_note nn 0 ;
+  end
+  for s in n.sources do
+     source_link s ;
+  end
+}
+
+# Routine for outputting the full text of a name,
+# if the name is non-null, and do nothing otherwise.
+
+define print_name n
+{
+  if n then
+    print n.fullname ,
+  end
+}
+
+# Routine to output an indication of whether family line continues
+# with a given individual
+
+define child_had_issue c
+local s f
+{
+  set s to "&nbsp;"
+  for f in c.marriages do
+    if f.children then
+      set s to "+"
+    end
+  end
+  print "<TT>" s "</TT>" ,
+}
+
+# Emit the proper URL to take us to the page that has the data
+# for a given individual.
+#
+# If we aren't producing family group sheets, then just link to
+# the URL for the individual.
+# If we are producing family group sheets, then link to the most
+# appropriate family page:
+#	If the individual has a marriage, then the link goes to that
+#	  family's page.
+#	If the individual has no marriage, then the link goes to the first
+#	  family in which the individual is listed as a child.
+#	If the individual is not a child in any family, then the link goes
+#	  to the page for that individual.
+#
+# When doing family groups, the f argument specifies the particular
+# family group to which the link should go.
+
+define indiv_url i
+local m
+{
+  if FAMILY_GROUPS then
+    if i.marriages then
+      set m to i.marriages
+      if m then
+         print m.url "#" i.xref ,
+      end
+    else
+      set m to i.families
+      if m then
+        print m.url "#" i.xref ,
+      else
+        print i.url ,
+      end
+    end
+  else
+    print i.url ,
+  end
+}
+
+define indiv_family_url i f
+local m notfound
+{
+  if FAMILY_GROUPS then
+    set notfound to 1
+    if i.marriages then
+      for m in i.marriages do
+        if m = f then
+          print m.url "#" i.xref ,
+          set notfound to 0
+        end
+      end
+      if notfound then
+        print i.marriages.url "#" i.xref ,
+      end
+    elseif i.families then
+      for m in i.families do
+        if m = f then
+          print m.url "#" i.xref ,
+          set notfound to 0
+        end
+      end
+      if notfound then
+        print i.families.url "#" i.xref ,
+      end
+    else
+      print i.url ,
+    end
+  else
+    print i.url ,
+  end
+}
+
+#---------------------------------------------------------------------
+# FAMILY GROUP PAGES
+#---------------------------------------------------------------------
+
+# Output a page of families.
+#   Parameter f is head of a list of families to be output
+#   in a single page.
+
+define do_families_ f
+{
+  # If we are not doing family-group-style output, then do nothing
+  if FAMILY_GROUPS then
+    print "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">" ;
+    print "<HTML>" ;
+    print "<HEAD>" ;
+    print "<TITLE>" ,
+    if f.husband then
+      print_name f.husband.name ;
+    else
+      print_alternatives UNKNOWN_TEXT "(Unknown)" ;
+    end
+    print " / " ,
+    if f.wife then
+      print_name f.wife.name ;
+    else
+      print_alternatives UNKNOWN_TEXT "(Unknown)" ;
+    end
+    print "</TITLE>" ;
+    if ~OMIT_META then
+      print "<META NAME=\"Keywords\" content=\"",
+      if f.husband then
+        print_name f.husband.name ;
+        print ", " ,
+      end
+      if f.wife then
+        print_name f.wife.name ;
+        print ", " ,
+      end
+      print ", GED2HTML, genealogy\">" ;
+      print "<META NAME=\"Generator\" content=\"" VERSION "\">" ;
+      print "<META NAME=\"Date\" content=\"" METADATE "\">" ;
+    end  
+    print "</HEAD>" ;
+    html_body ;
+    while f do
+      do_family f ;
+      set f to f.next
+    end
+    print "</BODY>" ;
+    print "</HTML>" ;
+  end
+}
+
+# Routines to output a family group sheet for a given family
+
+define do_family f
+local e m c n s
+{
+  print "<H2 ALIGN=CENTER>" ,
+  if f.husband then
+    print "<A NAME=\"" f.husband.xref "\">" ,
+    print_name f.husband.name ;
+    print "</A>" ,
+  else
+    print_alternatives UNKNOWN_TEXT "(Unknown)" ;
+  end
+  print " / " ,
+  if f.wife then
+    print "<A NAME=\"" f.wife.xref "\">" ,
+    print_name f.wife.name ;
+    print "</A>" ,
+  else
+    print_alternatives UNKNOWN_TEXT "(Unknown)" ;
+  end
+  print "</H2>" ;
+  for n in f.notes do
+    do_note n 0 ;
+  end
+  for s in f.sources do
+    source_link s ;
+  end
+  print "<TABLE CELLSPACING=0 WIDTH=\"100%\">" ;
+  print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+  if f.husband then  
+    print "<TR><TD COLSPAN=4>" ,
+    print_alternatives HUSBAND_TEXT "Husband" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<B>" ,
+    print_name f.husband.name ;
+    print "</B>" ;
+    print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+    do_husband_or_wife f f.husband "Husband" ;
+    print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+  else
+    print "<TR><TD COLSPAN=4>" ,
+    print_alternatives HUSBAND_TEXT "Husband" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+  end
+  if f.wife then
+    print "<TR><TD COLSPAN=4>" ,
+    print_alternatives WIFE_TEXT "Wife" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<B>" ,
+    print_name f.wife.name ;
+    print "</B>" ;
+    print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+    do_husband_or_wife f f.wife "Wife" ;
+    print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+  else
+    print "<TR><TD COLSPAN=4>" ,
+    print_alternatives WIFE_TEXT "Wife" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=3>" ;
+  end
+  print "<TR><TD COLSPAN=4><B>" ,
+  print_alternatives CHILDREN_TEXT "CHILDREN" ;
+  print "</B>" ;
+  print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=1>" ;
+  for c in f.children do
+    do_child f c ;
+  end
+  print "</TABLE>" ;
+  print "<P><A HREF=\"" PERSONS_URL "\">" ,
+  print_alternatives INDEX_TEXT "INDEX" ;
+  print "</A></P>" ;
+  #
+  # Emit all notes and sources associated with this individual
+  #
+  family_notes f 1 ;
+  if f.husband then
+    indiv_notes f.husband 1 ;
+  end
+  if f.wife then
+    indiv_notes f.wife 1 ;
+  end
+  if f.children then
+    for c in f.children do
+      indiv_notes c 1 ;
+    end
+  end
+  family_sources f 1 ;
+  if f.husband then
+    indiv_sources f.husband 1 ;
+  end
+  if f.wife then
+    indiv_sources f.wife 1 ;
+  end
+  if f.children then
+    for c in f.children do
+      indiv_sources c 1 ;
+    end
+  end
+  page_footer ;
+}
+
+define do_child f c
+local n s
+{
+  print "<TR VALIGN=TOP>" ,
+  print "<TD ALIGN=RIGHT>" ,
+  print_alternatives NAME_TEXT "Name" ;
+  print_alternatives COLON_TEXT ": " ;
+  print "<TD>" ,
+  print "<A NAME=\"" c.xref "\"></A>" ;
+  print "<A HREF=\"" ,
+  indiv_family_url c f ;
+  print "\">" ,
+  print_name c.name ;
+  print "</A>" ;
+  if ~c.living then
+    for n in c.notes do
+       do_note n 0 ;
+    end
+    for s in c.sources do
+       source_link s ;
+    end
+  else
+    do_note c.living 0 ;
+  end
+  print "<TR VALIGN=TOP>" ,
+  born_field c ;
+  if c.marriages then
+     married_field c.marriages c ;
+  end
+  died_field c ;
+  spouses_field c ;
+  print "<TR><TD COLSPAN=4><HR NOSHADE SIZE=1>" ;
+}
+
+define do_husband_or_wife f i which
+local e m c n s
+{
+  if i & (~i.living) then
+    born_field i ;
+    if which = "Husband" then
+      married_field f i ;
+    end
+    died_field i ;
+    father_field i f ;
+    mother_field i f ;
+    spouses_field i ;
+    if i.notes then
+      print "<TR VALIGN=TOP><TD ALIGN=RIGHT>" ,
+      print_alternatives NOTES_TEXT "Notes" ;
+      print_alternatives COLON_TEXT ": " ;
+      print "<TD COLSPAN=3>" ;
+      for n in i.notes do
+	do_note n 0 ;
+      end
+    end
+    if i.sources then
+      print "<TR VALIGN=TOP><TD ALIGN=RIGHT>" ,
+      print_alternatives SOURCES_TEXT "Sources" ;
+      print_alternatives COLON_TEXT ": " ;
+      print "<TD COLSPAN=3>" ;
+      for s in i.sources do
+        source_link s ;
+      end
+    end
+  else
+    print "<TR VALIGN=TOP><TD ALIGN=RIGHT WIDTH=\"10%\">" ;
+    print_alternatives BORN_TEXT "Born" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TD WIDTH=\"40%\">" ,
+    print "<TD ALIGN=RIGHT WIDTH=\"10%\">at:<TD WIDTH=\"40%\">" ;
+    print "<TD ALIGN=RIGHT>" ,
+    print_alternatives AT_TEXT "at" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TD>" ;
+    print "<TR VALIGN=TOP><TD ALIGN=RIGHT>" ;
+    print_alternatives DIED_TEXT "Died" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TD>" ,
+    print "<TD ALIGN=RIGHT>" ;
+    print_alternatives AT_TEXT "at" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TD>" ;
+    print "<TR VALIGN=TOP><TD ALIGN=RIGHT>" ,
+    print_alternatives FATHER_TEXT "Father" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TD>" ,
+    print "<TR VALIGN=TOP><TD ALIGN=RIGHT>" ,
+    print_alternatives MOTHER_TEXT "Mother" ;
+    print_alternatives COLON_TEXT ": " ;
+    print "<TD>" ,
+  end
+}
+
+# Routines to do output of the various kinds of fields in the
+# family group sheet.
+
+define born_field i
+local e
+{
+   print "<TR VALIGN=TOP>" ,
+   print "<TD ALIGN=RIGHT WIDTH=\"10%\">" ,
+   if i.birth & ~i.living then
+     set e to i.birth
+     print_alternatives BORN_TEXT "Born" ;
+   elseif i.christening & ~i.living then
+     set e to i.christening
+     print e.tagname ;
+   else
+     set e to 0
+     print_alternatives BORN_TEXT "Born" ;
+   end
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD WIDTH=\"30%\">" ,
+   if e then
+     if e.date then
+       print e.date.string ,
+     end
+     event_notes e 0 ;
+     event_sources e 0 ;
+   end
+   print "<TD ALIGN=RIGHT WIDTH=\"10%\">" ,
+   print_alternatives AT_TEXT "at" ;
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD WIDTH=\"40%\">" ,
+   if e & e.place then
+     print e.place.name ;
+   else
+     print ;
+   end
+}
+
+define died_field i
+local e
+{
+   print "<TR VALIGN=TOP>" ,
+   print "<TD ALIGN=RIGHT>" ,
+   if i.death & ~i.living then
+     set e to i.death
+     print_alternatives DIED_TEXT "Died" ;
+   elseif i.burial & ~i.living then
+     set e to i.burial
+     print e.tagname ;
+   else
+     set e to 0
+     print_alternatives DIED_TEXT "Died" ;
+   end
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD>" ,
+   if e then
+     if e.date then
+       print e.date.string ,
+     end
+     event_notes e 0 ;
+     event_sources e 0 ;
+   end
+   print "<TD ALIGN=RIGHT>" ,
+   print_alternatives AT_TEXT "at" ;
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD>" ,
+   if e & e.place then
+     print e.place.name ,
+   else
+     print ;
+   end
+}
+
+define married_field f c
+local m e
+{
+   set m to 0
+   if ~c.living then
+     for e in f.events do
+       if e.tagcode = "MARR" then
+         print "<TR VALIGN=TOP>" ,
+         print "<TD ALIGN=RIGHT>" ,
+         print_alternatives MARRIED_TEXT "Married" ;
+         print_alternatives COLON_TEXT ": " ;
+         print "<TD>" ,
+         if e.date then
+           print e.date.string ,
+         end
+	 event_notes e 0 ;
+	 event_sources e 0 ;
+         print "<TD ALIGN=RIGHT>" ,
+         print_alternatives AT_TEXT "at" ;
+         print_alternatives COLON_TEXT ": " ;
+         print "<TD>" ,
+	 if e.place then
+	   print e.place.name ,
+         end
+	 print ;
+         set m to 1
+       end
+     end
+   end
+   if m = 0 then
+     print "<TR VALIGN=TOP>" ,
+     print "<TD ALIGN=RIGHT>" ,
+     print_alternatives MARRIED_TEXT "Married" ;
+     print_alternatives COLON_TEXT ": " ;
+     print "<TD>" ,
+     print "<TD ALIGN=RIGHT>" ,
+     print_alternatives AT_TEXT "at" ;
+     print_alternatives COLON_TEXT ": " ;
+     print "<TD>" ;
+   end
+}
+
+define spouses_field c
+local m first
+{
+   print "<TR VALIGN=TOP>" ,
+   print "<TD ALIGN=RIGHT>" ,
+   print_alternatives SPOUSES_TEXT "Spouses" ;
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD COLSPAN=3>" ,   
+   if ~c.living then
+     set first to 1
+     for m in c.marriages do
+	if m.wife & ~(m.wife = c) then
+           if ~first then
+             print ", " ,
+           else
+             set first to 0
+           end
+           print "<A HREF=\"" ,
+           indiv_family_url m.wife m ;
+           print "\">" ,
+           print_name m.wife.name ;
+           print "</A>" ;
+	elseif m.husband & ~(m.husband = c) then
+           if ~first then
+             print ", " ,
+           else
+             set first to 0
+           end
+           print "<A HREF=\"" ,
+           indiv_family_url m.husband m ;
+           print "\">" ,
+           print_name m.husband.name ;
+           print "</A>" ;
+        end
+     end
+   end
+}
+
+define father_field i f
+{
+   print "<TR VALIGN=TOP>" ,
+   print "<TD ALIGN=RIGHT>" ,
+   print_alternatives FATHER_TEXT "Father" ;
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD>" ,
+   if i.father & ~i.living then
+       print "<A HREF=\"" ,
+       indiv_family_url i.father f ;
+       print "\">" ,
+       print_name i.father.name ;
+       print "</A>" ;
+   else
+       print ;
+   end
+}
+
+define mother_field i f
+{
+   print "<TR VALIGN=TOP>" ,
+   print "<TD ALIGN=RIGHT>" ,
+   print_alternatives MOTHER_TEXT "Mother" ;
+   print_alternatives COLON_TEXT ": " ;
+   print "<TD>" ,
+   if i.mother & ~i.living then
+       print "<A HREF=\"" ,
+       indiv_family_url i.mother f ;
+       print "\">" ,
+       print_name i.mother.name ;
+       print "</A>" ;
+   else
+       print ;
+   end
+}
+
+#---------------------------------------------------------------------
+# LINKS TO NOTES AND SOURCES 
+#---------------------------------------------------------------------
+
+# Find all notes associated with a single family.
+# If here is nonzero, then output the notes right now,
+# otherwise output links to the notes.
+
+define family_notes f here
+local n e
+{
+   for n in f.notes do
+     do_note n here ;
+   end
+   for e in f.events do
+     event_notes e here ;
+   end
+}
+
+# Find all notes associated with a single individual
+# If here is nonzero, then output the notes right now,
+# otherwise output links to the notes.
+
+define indiv_notes i here
+local n e a
+{
+  if i.living then
+    do_note i.living here ;
+  else
+    for n in i.notes do
+       do_note n here ;
+    end
+    for n in i.names do
+       name_notes n here ;
+    end
+    for a in i.attributes do
+       if a.event then
+         event_notes a.event here ;
+       end
+    end
+    for e in i.events do
+       event_notes e here ;
+    end
+  end
+}
+
+# Find all notes associated with a single event
+# If here is nonzero, then output the notes right now,
+# otherwise output links to the notes.
+
+define event_notes e here
+local n
+{
+  for n in e.notes do
+     do_note n here ;
+  end
+}
+
+# Find all notes associated with a single source
+# If here is nonzero, then output the notes right now,
+# otherwise output links to the notes.
+
+define source_notes s here
+local n
+{
+  for n in s.notes do
+     do_note n here ;
+  end
+}
+
+# Find all notes associated with a name
+# If here is nonzero, then output the notes right now,
+# otherwise output links to the notes.
+
+define name_notes n here
+local nn
+{
+  for nn in n.notes do
+     do_note nn here ;
+  end
+}
+
+# Find all sources associated with a single family group
+# If here is nonzero, then output the sources right now,
+# otherwise output links to the sources.
+
+define family_sources f here
+local s c e
+{
+   for e in f.events do
+     event_sources e here ;
+   end
+   for s in f.sources do
+     if here then
+       do_citation s ;
+     else
+       source_link s ;
+     end
+   end
+}
+
+# Find all sources associated with a single individual
+# If here is nonzero, then output the sources right now,
+# otherwise output links to the sources.
+
+define indiv_sources i here
+local s e a n
+{
+  if ~i.living then
+    for s in i.sources do
+      if here then
+        do_citation s ;
+      else
+        source_link s ;
+      end
+    end
+    for n in i.names do
+      name_sources n here ;
+    end
+    for a in i.attributes do
+       if a.event then
+         event_sources a.event here ;
+       end
+    end
+    for e in i.events do
+       event_sources e here ;
+    end
+  end
+}
+
+# Output all sources associated with a single event
+# If here is nonzero, then output the sources right now,
+# otherwise output links to the sources.
+
+define event_sources e here
+local s
+{
+  for s in e.sources do
+    if here then
+      do_citation s ;
+    else
+      source_link s ;
+    end
+  end
+}
+
+# Find all sources associated with a name
+# If here is nonzero, then output the sources right now,
+# otherwise output links to the sources.
+
+define name_sources n here
+local s
+{
+  for s in n.sources do
+    if here then
+      do_citation s ;
+    else
+      source_link s ;
+    end
+  end
+}
+
+#---------------------------------------------------------------------
+# SOURCES PAGES
+#---------------------------------------------------------------------
+
+# Output a page of sources.
+#   Parameter s is head of a list of sources to be output
+#   in a single page.
+
+define do_sources_ s
+{
+  print "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">" ;
+  print "<HTML>" ;
+  print "<HEAD>" ;
+  print "<TITLE>" ,
+  print_alternatives SOURCES_TEXT "Sources" ;
+  print "</TITLE>" ;
+  if ~OMIT_META then
+    print "<META NAME=\"Description\" content=\"Sources\">" ;
+    print "<META NAME=\"Keywords\" content=\"Sources, GED2HTML, genealogy\">" ;
+    print "<META NAME=\"Generator\" content=\"" VERSION "\">" ;
+    print "<META NAME=\"Date\" content=\"" METADATE "\">" ;
+  end
+  print "</HEAD>" ;
+  html_body ;
+  print "<H2>" ,
+  print_alternatives SOURCES_TEXT "Sources" ;
+  print "</H2>" ;
+  while s do
+    print "<P>" ;
+    do_source s ;
+    set s to s.next
+  end
+  page_footer ;
+  print "</BODY>" ;
+  print "</HTML>" ;
+}
+
+# Routine for outputting a SOUR structure
+
+define do_source s
+local n r
+{
+  if s.xref then
+     print "<A NAME=\"" s.xref "\">[<B>" s.xref "</B>]</A>" ;
+  else
+     print "[<B>" s.tagname.upper "</B>]" ;
+  end
+  if s.abbreviation then
+    print "<EM>" ;
+    do_attr s.abbreviation 0 ;
+    print "</EM>" ;
+  end
+  if s.title then
+      print "<EM>" ;
+      print_text s.title 0 ;
+      print "</EM>" ;
+  end
+  if s.text then
+    print "<P><EM>" ;
+    print_text s.text 0 ;
+    print "</EM></P>" ;
+  end
+  if s.author | s.publication | s.refns | s.rin
+	| s.change | s.repository | s.notes
+  then
+    print "<UL>" ;
+    if s.author then
+      print_text s.author 1 ;
+    end
+    if s.publication then
+      print_text s.publication 1 ;
+    end
+    if s.repository then
+      do_repository s.repository 1 ;
+    end
+    for r in s.refns do
+      do_refn r 1 ;
+    end
+    if s.rin then
+        do_attr s.rin 1 ;
+    end
+    if s.change then
+      do_change s.change 1 ;
+    end
+    for n in s.notes do
+      print "<LI><EM>" n.tagname.upper "</EM>: " ,
+      do_note n 1 ;
+    end
+    print "</UL>" ;
+  end
+}
+
+# Routine for outputting a link to a source citation
+# that appears later on the same page
+
+define source_link c
+{
+  print "<A HREF=\"#" c.serial "\">[" c.serial "]</A>" ;
+}
+
+# Routine for outputting a source citation:
+
+define do_citation c
+local n t
+{
+  print "<P>" ;
+  print "<A NAME=\"" c.serial "\">[<B>" c.serial "</B>]</A>" ;
+  if c.source then
+    if INLINE_SOURCES then
+      do_source c.source ;
+    else
+      print "<A HREF=\"" c.source.url "\">[" c.source.xref "]</A>" ;
+      if c.source.abbreviation then
+        print "<EM>" ;
+        do_attr c.source.abbreviation 0 ;
+        print "</EM>" ;
+      end
+    end
+  else
+    print "[" c.tagname.upper "]" ;
+  end
+  if c.description then
+    print_text c.description 0 ;
+  end
+  if c.page | c.event | c.quay | c.data | c.texts | c.notes then
+    print "<UL>" ;
+    if c.page then
+      do_attr c.page 1 ;
+    end
+    if c.event then
+      do_attr c.event 1 ;
+    end
+    if c.quay then
+      do_attr c.quay 1 ;
+    end
+    if c.data then
+      do_source_data c.data ;
+    end
+    for t in c.texts do
+         print "<P><EM>" ;
+         print_text t 0 ;
+         print "</EM></P>" ;
+    end
+    for n in c.notes do
+      print "<LI><EM>" n.tagname.upper "</EM>: " ,
+      do_note n 1 ;
+    end
+    print "</UL>" ;
+  end
+}
+
+# Routine to output "source data", which is certain information that
+# can appear in a source record or in a source citation
+
+define do_source_data d
+local e n t
+{
+  print "<LI><EM>" d.tagname.upper "</EM>: " ;
+  if d.date | d.events | d.agency then
+    print "<UL>" ;
+    if d.date then
+      print "<LI><EM>" d.date.tagname.upper "</EM>: " d.date.string ;
+    end
+    for e in d.events do
+      do_event e 1;
+    end
+    if d.agency then
+      do_attr d.agency 1 ;
+    end
+    print "</UL>" ;
+  end
+  for t in d.texts do
+    print "<P><EM>" ;  
+    print_text t 0 ;
+    print "</EM></P>" ;
+  end
+  for n in d.notes do
+    do_note n 1 ;
+  end
+}
+
+# Routine for outputting source repository info
+# First argument is a repository citation.
+# If "item" is nonzero, then an HTML <LI> is output,
+# together with the GEDCOM tag.
+
+define do_repository r item
+local rr rn n
+{
+  if item then
+    print "<LI><EM>" r.tagname.upper "</EM>: " ,
+  end
+  set rr to r.repository
+  if rr.name & rr.name.text then
+    print rr.name.text ;
+  end
+  if rr.refns | rr.rin | r.caln | rr.address then
+    print "<UL>" ;
+    for rn in rr.refns do
+      do_refn rn 1 ;
+    end
+    if rr.rin then
+       do_attr rr.rin 1 ;
+    end
+    if r.caln then
+       do_attr r.caln 1 ;
+    end
+    if rr.address then
+       do_address rr.address ;
+    end
+    print "</UL>" ;
+  end
+  for n in r.notes do
+    do_note n 1 ;
+  end
+  for n in rr.notes do
+    do_note n 1 ;
+  end
+}
+
+# Output change info.
+#   If "item" is nonzero, then an HTML <LI> is output,
+#   together with the GEDCOM tag.
+
+define do_change c item
+local n
+{
+  if item then
+    print "<LI><EM>" c.tagname.upper "</EM>: " ,
+  end
+  if c.date then
+    print c.date.string ;
+  end
+  for n in c.notes do
+    do_note n 1 ;
+  end
+}
+
+#---------------------------------------------------------------------
+# NOTES PAGES
+#---------------------------------------------------------------------
+
+# Output a page of notes.
+#   Parameter n is head of a list of notes to be output
+#   in a single page.
+
+define do_notes_ n
+{
+  print "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2//EN\">" ;
+  print "<HTML>" ;
+  print "<HEAD>" ;
+  print "<TITLE>" ,
+  print_alternatives NOTES_TEXT "Notes" ;
+  print "</TITLE>" ;
+  if ~OMIT_META then
+    print "<META NAME=\"Description\" content=\"" ,
+    print_alternatives NOTES_TEXT "Notes" ;
+    print "\">" ;
+    print "<META NAME=\"Keywords\" content=\"Notes, GED2HTML, genealogy\">" ;
+    print "<META NAME=\"Generator\" content=\"" VERSION "\">" ;
+    print "<META NAME=\"Date\" content=\"" METADATE "\">" ;
+  end
+  print "</HEAD>" ;
+  html_body ;
+  print "<H2>" ,
+  print_alternatives NOTES_TEXT "Notes" ;
+  print "</H2>" ;
+  while n do
+    do_note n 2 ;
+    set n to n.next
+  end
+  page_footer ;
+  print "</BODY>" ;
+  print "</HTML>" ;
+}
+
+# Routine for outputting a NOTE structure:
+#	If "here" is 0, then a link is output.  For notes at GEDCOM
+#		level 0, the link goes to a separate notes page.
+#		For notes at GEDCOM level 1 or higher, the link goes to
+#		the end of the same page.
+#	If "here" is 1, then a note at GEDCOM level 1 or higher is
+#		output now, and a note at GEDCOM level 0 is output
+#		if INLINE_NOTES is nonzero, otherwise a link is output
+#		to that note, either on this page or the notes page.
+#	If "here" is 2, then the note is always output now.
+
+define do_note n here
+local s r
+{
+  if here & ((~n.xref) | INLINE_NOTES | here = 2) then
+    # Print the complete note information now, together with an anchor
+    print "<P>" ;
+    if n.xref then
+       print "<A NAME=\"" n.xref "\">[<B>" n.xref "</B>]</A>" ;
+    else
+       print "<A NAME=\"" n.serial "\">[<B>" n.serial "</B>]</A>" ;
+    end
+    if n.refns | n.rin then
+      print "<UL>" ;
+      for r in n.refns do
+        do_refn r 1 ;
+      end
+      if n.rin then
+        do_attr n.rin 1 ;
+      end
+      print "</UL>" ;
+    end
+    if n.text then
+       print_text n.text 0 ;
+    end
+    print "<P>" ;
+    for s in n.sources do
+      source_link s ;
+    end
+  else
+    # Make a link to the note, either on this page, or on a notes page
+    if n.xref then
+      if INLINE_NOTES then
+        print "<A HREF=\"#" n.xref "\">[" n.xref "]</A>" ;
+      else
+        print "<A HREF=\"" n.url "\">[" n.xref "]</A>" ;
+      end
+    else
+      print "<A HREF=\"#" n.serial "\">[" n.serial "]</A>" ;
+    end
+  end
+}
+
+# Routine to output a "text" structure, which is a common
+# component of several other GEDCOM structures.
+# If "item" is nonzero, then an HTML <LI> is output,
+# together with the GEDCOM tag associated with the text.
+
+define print_text t item
+{
+  if item then
+    print "<LI><EM> " t.tagname.upper "</EM>: " ;
+  end
+  while t do
+    print t.text ;
+    if t.cont then
+       if CONT_MEANS_BREAK then
+          print "<BR>" ;
+       end
+       set t to t.cont
+    else
+       set t to t.conc
+    end
+  end
+}
+
+#---------------------------------------------------------------------
+# GENDEX FILE
+#---------------------------------------------------------------------
+
+# Output a "gendex.txt" index file for use by the GENDEX index
+#   server at http://www.gendex.com/gendex/
+#
+#   Parameter i is head of a list of individuals to be output
+#   in a single page.
+#
+# PLEASE DO NOT CHANGE THIS.  THE GENDEX SERVER DEPENDS ON THIS
+#   FILE BEING IN A SPECIFIC FORMAT.
+
+define do_gendex_ i
+local e d p
+{
+   print ";; " VERSION ", " TODAY ;
+   print ";; See the documentation to find out how this file can" ;
+   print ";; be used to add your names to a master index." ;
+   print ";;" ;
+   while i do
+     if ~i.living then
+        indiv_url i ;
+        print "|" ,
+        if i.name & i.name.surname then
+          print i.name.surname ,
+        end
+        print "|" ,
+        if i.name & i.name.gedcom then
+          print i.name.gedcom ,
+        end
+        print "|" ,
+        set d to ""
+        set p to ""
+        if i.birth then
+	  set e to i.birth
+          if e.date then
+            set d to e.date.string
+          end
+          if e.place then
+            set p to e.place.name
+          end
+        else
+	  if i.christening then
+	    set e to i.christening
+            if e.date then
+              set d to e.date.string
+            end
+            if e.place then
+              set p to e.place.name
+            end
+	  end
+        end
+        if d then print d , end
+        print "|" ,
+        if p then print p , end
+        print "|" ,
+        set d to ""
+        set p to ""
+        if i.death then
+	  set e to i.death
+          if e.date then
+            set d to e.date.string
+          end
+          if e.place then
+            set p to e.place.name
+          end
+        else
+	  if i.burial then
+	    set e to i.burial
+            if e.date then
+              set d to e.date.string
+            end
+            if e.place then
+              set p to e.place.name
+            end
+	  end
+        end
+        if d then print d , end
+        print "|" ,
+        if p then print p , end
+        print "|" ,
+        print ;
+     end
+     set i to i.next
+   end
+   print ";; This file has not been truncated." ;
+}
+
+#---------------------------------------------------------------------
+# EVENTS AND ATTRIBUTES
+#---------------------------------------------------------------------
+
+# Output an event structure
+#   If "item" is nonzero, then an HTML <LI> is output,
+#   together with the GEDCOM tag associated with the event.
+
+define do_event e item
+{
+  if item then
+    print "<LI><EM>" e.tagname.upper "</EM>: " ,
+  end
+  if e.text then
+     print e.text "<BR>" ;
+  end
+  do_event_detail e ;
+}
+
+# Output an attribute consisting of a single text line,
+#   plus possibly an event detail.
+#   If "item" is nonzero, then an HTML <LI> is output,
+#   together with the GEDCOM tag associated with the attribute.
+
+define do_attr a item
+{
+  if item then
+    print "<LI><EM>" a.tagname.upper "</EM>: " ,
+  end
+  if a.text then
+	print a.text "<BR>" ;
+  end
+  if a.event then
+	do_event_detail a.event ;
+  end
+}
+
+# Output an event, except for the tag
+#   This code is also used by do_attr
+
+define do_event_detail e
+local s n
+{
+  if e.type then
+    print e.type ": " ;
+  end
+  if e.date & e.place then
+    print e.date.string ", " e.place.name ;
+  elseif e.date then
+    print e.date.string ;
+  elseif e.place then
+    print e.place.name ;
+  else
+    print ;
+  end
+  if e.address then
+    do_address e.address ;
+  end
+  for n in e.notes do
+    do_note n 0 ;
+  end
+  for s in e.sources do
+    source_link s ;
+  end
+}
+
+# Output an address
+
+define do_address a
+local t
+{
+  if a.text then
+    set t to a.text
+    while t do
+      print t.text ,
+      if t.cont then
+        print "; " ,
+	set t to t.cont
+      else
+	set t to 0
+      end
+    end
+    print "<BR>" ;
+  end
+}
+
+# Output a REFN structure.
+#   If "item" is nonzero, then an HTML <LI> is output,
+#   together with the GEDCOM tag associated with the refn.
+
+define do_refn r item
+{
+  if item then
+    print "<LI><EM>" r.tagname.upper ,
+    if r.type then
+      print " (" r.type ")" ,
+    end
+    print "</EM>: " ,
+  end
+  print r.number ;
+}
+
+# Output LDS ordinance information.
+#   If "item" is nonzero, then an HTML <LI> is output,
+#   together with the GEDCOM tag associated with the ordinance.
+
+define do_ordn o item
+local s
+{
+  if item then
+    print "<LI><EM>" o.tagname.upper "</EM>: " ,
+  end
+  if o.date & o.place then
+    print o.date.string ", " o.place.name ;
+  elseif o.date then
+    print o.date.string ;
+  elseif o.place then
+    print o.place.name ;
+  else
+    print ;
+  end
+  for s in o.sources do
+    source_link s ;
+  end
+  if o.temple then
+    print "<BR><EM>" ,
+    print_alternatives TEMPLE_TEXT "Temple" ;
+    print "</EM>" ,
+    print_alternatives COLON_TEXT ": " ;
+    print o.temple ;
+  end
+  if o.status then
+    print "<BR><EM>" ,
+    print_alternatives STATUS_TEXT "Status" ;
+    print "</EM>" ,
+    print_alternatives COLON_TEXT ": " ;
+    print o.status ;
+  end
+}
+
+#---------------------------------------------------------------------
+# INTERNATIONALIZATION
+#---------------------------------------------------------------------
+
+# Sets the value of each piece of text in the template, based on the
+# specified language name.  As this gets run *after* initializations
+# from any options file, we have to check each variable to see if it
+# has already been given a value.
+#
+# The English translations are already coded as defaults in the
+# rest of the template, so they don't appear again here.
+
+define internationalize
+local LANG
+{
+  set LANG to LANGUAGE.upper
+  if LANG = "FRENCH" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "PAGE D'ACCUEIL"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "COURRIER"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML créé par"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "le"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Auteur"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Index des Personnes"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Index des Noms de Famille"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "personnes"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "familles"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "du fichier"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "NOMS DE FAMILLE"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONNES"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Notes"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Sources"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "PLUS HAUT"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "PRÉCÉDENT"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "SUIVANT"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mère"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Père"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "ENFANTS"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Famille"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Temple"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Époux"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Épouse"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Nom"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Naissance"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to "à"
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Décès"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Mariés"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Conjoint(e)"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to " : "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "-- à --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(Inconnu)"
+    end
+  elseif LANG = "DUTCH" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HOME"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "E-MAIL"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML aangemaakt met"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "op"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Auteur"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Lijst van personen"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Lijst van achternamen"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "personen"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "gezinnen"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "uit bestand"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "ACHTERNAMEN"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONEN"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Aantekeningen"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Bronnen"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "OMHOOG"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "VORIGE"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "VOLGENDE"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Moeder"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Vader"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Kinderen"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Gezin"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Echtgenoot"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Echtgenote"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Naam"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Geboorte"
+    end
+    if ~AT_TEXT then
+       set AT_TEXT to ", "
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Overlijden"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Huwelijk"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Echtgenoot"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "GERMAN" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HOME"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "EMAIL"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML erzeugt von"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "am"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Autor"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Index der Personen"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Index der Familiennamen"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "Personen"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "Familien"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "aus der Datei"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "FAMILIENNAMEN"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONEN"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Anmerkungen"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Quellen"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "NACH OBEN"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "VORHERIGE"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "FOLGENDE"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mutter"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Vater"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Kinder"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Familie"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Ehemann"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Ehefrau"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Name"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Geburt"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to "in"
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Tod"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Geheiratet"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Ehegatte"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "NORWEGIAN" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HJEMMESIDE"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "E-MAIL"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML opprettet av"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "den"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Forfatter"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Index på personer"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Index på familie"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "personer"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "familier"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "fra filen"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "FAMILIER"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONER"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Notater"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Sources"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "OPP"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "TILBAKE"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "NESTE"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mor"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Far"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Barn"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Familie"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Ektemann"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Hustru"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Navn"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Født"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to ", "
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Død"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Gift"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Ektefelle"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "ITALIAN" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HOME"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "EMAIL"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML creato da"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "il"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Autore"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Indice delle Persone"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Indice dei Cognomi"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "individui"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "famiglie"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "dal file"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "COGNOMI"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONE"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Note"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Sorgenti"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "SOPRA"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "PRECEDENTE"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "SEGUENTE"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Madre"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Padre"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Figli"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Famiglia"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempio"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Stato"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Sposo"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Sposa"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Nome"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Nascita"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to "a"
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Morte"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "sposato"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Coniuge"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to " : "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "SWEDISH" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HEMSIDA"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "E-POST"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML skapad av"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to ""
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Författare"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Personindex"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Familjeindex"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "personer"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "familjer"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "från filen"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "FAMILJER"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONER"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Anteckningar"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Källor"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "UPP"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "TILLBAKA"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "NÄSTA"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mor"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Far"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Barn"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Familj"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Make"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Hustru"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Namn"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Född"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to ", "
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Död"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Gift"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Make"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "DANISH" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HJEMMESIDE"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "E-POST"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML dannet af"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "den"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Forfatter"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Personregister"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Efternavnsregister"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "personer"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "familier"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "fra filen"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "EFTERNAVNE"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONER"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Bemærkninger"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Kilder"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "OP"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "TILBAGE"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "NÆSTE"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mor"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Far"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Børn"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Familie"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Ægtemand"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Hustru"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Navn"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Født"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to "i"
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Død"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Gift"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Ægtefælle"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "-- til --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "FINNISH" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "KOTISIVU"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "SÄHKÖPOSTI"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML luotu: "
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to ""
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Kirjoittaja"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Henkilöhakemisto"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Sukunimihakemisto"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "henkilöä"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "perhettä"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "tiedostosta"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "SUKUNIMET"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "HENKILÖT"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Huomautuksia"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Lähteet"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "YLÖS"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "TAKAISIN"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "SEURAAVA"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Äiti"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Isä"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Lapset"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Perhe"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Temppeli"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Asema"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Mies"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Vaimo"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Nimi"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Syntynyt"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to ", "
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Kuollut"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Vihitty"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Puoliso"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "SLOVENIAN" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "Rodovniki znanih Slovencev"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "Informacije-sporoèila"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML narejen z"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "dne"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Avtor"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Kazalo oseb"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Kazalo priimkov"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "oseb"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "družin"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "iz datoteke"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "SEZNAM PRIIMKOV"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "KAZALO OSEB"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Pripombe"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Viri"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "OSNOVNO KAZALO OSEB"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "PREJŠNJE KAZALO OSEB"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "NASLEDNJE KAZALO OSEB"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mati"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Oèe"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Otroci"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Družina"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Mož"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Žena"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Ime"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Rojstvo"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to "v"
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Smrt"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Poroka"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Zakonec"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "-- do --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(Neznano)"
+    end
+  elseif LANG = "PORTUGUESE" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HOME"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "E-MAIL"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML criada por"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "em"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Autor"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Índice das Pessoas"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Índice dos Sobrenomes"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "pessoas"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "famílias"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "do arquivo"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "SOBRENOMES"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PESSOAS"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Notas"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Fontes"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "ACIMA"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "ANTERIORES"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "SEGUINTES"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Mãe"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Pai"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Filhos"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Família"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Templo"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Esposo"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Esposa"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Nome"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Nascimento"
+    end
+    if ~AT_TEXT then
+        set AT_TEXT to "em"
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Morte"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "casamento"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Cônjuge"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  elseif LANG = "AFRIKAANS" then
+    if ~HOME_TEXT then
+      set HOME_TEXT to "HOME"
+    end
+    if ~EMAIL_TEXT then
+       set EMAIL_TEXT to "E-POS"
+    end
+    if ~CREATED_BY_TEXT then
+       set CREATED_BY_TEXT to "HTML geskep met"
+    end
+    if ~ON_TEXT then
+       set ON_TEXT to "op"
+    end
+    if ~AUTHOR_TEXT then
+       set AUTHOR_TEXT to "Outeur"
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+       set INDEX_OF_PERSONS_TEXT to "Lys van persone"
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+       set INDEX_OF_SURNAMES_TEXT to "Lys van vanne"
+    end
+    if ~INDIVIDUALS_TEXT then
+       set INDIVIDUALS_TEXT to "persone"
+    end
+    if ~FAMILIES_TEXT then
+       set FAMILIES_TEXT to "gesinne"
+    end
+    if ~FROM_FILE_TEXT then
+       set FROM_FILE_TEXT to "uit lêer"
+    end
+    if ~SURNAMES_TEXT then
+       set SURNAMES_TEXT to "VANNE"
+    end
+    if ~INDEX_TEXT then
+       set INDEX_TEXT to "PERSONE"
+    end
+    if ~NOTES_TEXT then
+        set NOTES_TEXT to "Aantekeninge"
+    end
+    if ~SOURCES_TEXT then
+        set SOURCES_TEXT to "Bronne"
+    end
+    if ~UP_TEXT then
+       set UP_TEXT to "NA BO"
+    end
+    if ~BACK_TEXT then
+       set BACK_TEXT to "TERUG"
+    end
+    if ~NEXT_TEXT then
+       set NEXT_TEXT to "VOLGENDE"
+    end
+    if ~MOTHER_TEXT then
+       set MOTHER_TEXT to "Moeder"
+    end
+    if ~FATHER_TEXT then
+       set FATHER_TEXT to "Vader"
+    end
+    if ~CHILDREN_TEXT then
+       set CHILDREN_TEXT to "Kinders"
+    end
+    if ~FAMILY_TEXT then
+       set FAMILY_TEXT to "Gesin"
+    end
+    if ~TEMPLE_TEXT then
+       set TEMPLE_TEXT to "Tempel"
+    end
+    if ~STATUS_TEXT then
+       set STATUS_TEXT to "Status"
+    end
+    if ~HUSBAND_TEXT then
+       set HUSBAND_TEXT to "Eggenoot"
+    end
+    if ~WIFE_TEXT then
+       set WIFE_TEXT to "Eggenote"
+    end
+    if ~NAME_TEXT then
+       set NAME_TEXT to "Naam"
+    end
+    if ~BORN_TEXT then
+       set BORN_TEXT to "Geboorte"
+    end
+    if ~AT_TEXT then
+       set AT_TEXT to ", "
+    end
+    if ~DIED_TEXT then
+        set DIED_TEXT to "Sterf"
+    end
+    if ~MARRIED_TEXT then
+        set MARRIED_TEXT to "Huwelik"
+    end
+    if ~SPOUSES_TEXT then
+        set SPOUSES_TEXT to "Eggenotes"
+    end
+    if ~COLON_TEXT then
+         set COLON_TEXT to ": "
+    end
+    if ~TO_TEXT then
+         set TO_TEXT to "--  --"
+    end
+    if ~UNKNOWN_TEXT then
+         set UNKNOWN_TEXT to "(???)"
+    end
+  else
+    if ~HOME_TEXT then
+#      set HOME_TEXT to ""
+    end
+    if ~EMAIL_TEXT then
+#       set EMAIL_TEXT to ""
+    end
+    if ~CREATED_BY_TEXT then
+#       set CREATED_BY_TEXT to ""
+    end
+    if ~ON_TEXT then
+#       set ON_TEXT to ""
+    end
+    if ~AUTHOR_TEXT then
+#       set AUTHOR_TEXT to ""
+    end
+    if ~INDEX_OF_PERSONS_TEXT then
+#       set INDEX_OF_PERSONS_TEXT to ""
+    end
+    if ~INDEX_OF_SURNAMES_TEXT then
+#       set INDEX_OF_SURNAMES_TEXT to ""
+    end
+    if ~INDIVIDUALS_TEXT then
+#       set INDIVIDUALS_TEXT to ""
+    end
+    if ~FAMILIES_TEXT then
+#       set FAMILIES_TEXT to ""
+    end
+    if ~FROM_FILE_TEXT then
+#       set FROM_FILE_TEXT to ""
+    end
+    if ~SURNAMES_TEXT then
+#       set SURNAMES_TEXT to ""
+    end
+    if ~INDEX_TEXT then
+#       set INDEX_TEXT to ""
+    end
+    if ~NOTES_TEXT then
+#        set NOTES_TEXT to ""
+    end
+    if ~SOURCES_TEXT then
+#        set SOURCES_TEXT to ""
+    end
+    if ~UP_TEXT then
+#       set UP_TEXT to ""
+    end
+    if ~BACK_TEXT then
+#       set BACK_TEXT to ""
+    end
+    if ~NEXT_TEXT then
+#       set NEXT_TEXT to ""
+    end
+    if ~MOTHER_TEXT then
+#       set MOTHER_TEXT to ""
+    end
+    if ~FATHER_TEXT then
+#       set FATHER_TEXT to ""
+    end
+    if ~CHILDREN_TEXT then
+#       set CHILDREN_TEXT to ""
+    end
+    if ~FAMILY_TEXT then
+#       set FAMILY_TEXT to ""
+    end
+    if ~TEMPLE_TEXT then
+#       set TEMPLE_TEXT to ""
+    end
+    if ~STATUS_TEXT then
+#       set STATUS_TEXT to ""
+    end
+    if ~HUSBAND_TEXT then
+#       set HUSBAND_TEXT to ""
+    end
+    if ~WIFE_TEXT then
+#       set WIFE_TEXT to ""
+    end
+    if ~NAME_TEXT then
+#       set NAME_TEXT to ""
+    end
+    if ~BORN_TEXT then
+#       set BORN_TEXT to ""
+    end
+    if ~AT_TEXT then
+#        set AT_TEXT to ""
+    end
+    if ~DIED_TEXT then
+#        set DIED_TEXT to ""
+    end
+    if ~MARRIED_TEXT then
+#        set MARRIED_TEXT to ""
+    end
+    if ~SPOUSES_TEXT then
+#        set SPOUSES_TEXT to ""
+    end
+    if ~COLON_TEXT then
+#         set COLON_TEXT to ": "
+    end
+  end
+}
