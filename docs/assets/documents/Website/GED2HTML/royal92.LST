@@ -1,0 +1,35 @@
+
+Importing from C:\Documents and Settings\mpruddy\My Documents\GENEALOGY
+DOWNLOADS\GED2HTML\royal92.ged
+
+Step 1:
+
+       Source: PAF 2.2
+  Destination: PAF
+Creation Date: 20 NOV 1992
+Original File: ROYALS.GED
+Character Set: ANSEL
+
+Step 2:
+
+Line 2684 : Tag: DATE, invalid date: 1815/1816, line ignored.
+Line 3038 : Tag: NAME, name too long, truncated to: Ferdinand I of Hohenzollern-
+            Hohenzollern
+Line 4079 : Tag: DATE, invalid date: 1951/1952, line ignored.
+Line 4088 : Tag: DATE, invalid date: 1942/1943, line ignored.
+Line 10710 : Tag: DATE, invalid date: 1361/1362, line ignored.
+Line 11365 : Tag: DATE, invalid date: 1761/1762, line ignored.
+Line 11399 : Tag: DATE, invalid date: 1675/1676, line ignored.
+Line 11727 : Tag: DATE, invalid date: 1495/1496, line ignored.
+Line 12012 : Tag: DATE, invalid date: 1027/1028, line ignored.
+Line 12060 : Tag: DATE, invalid date: 1056/1060, line ignored.
+Line 12129 : Tag: DATE, invalid date: 1079/1080, line ignored.
+Line 12159 : Tag: DATE, invalid date: ABT    1103/1104, line ignored.
+Line 12199 : Tag: DATE, invalid date: ABT    1103/1105, line ignored.
+Line 12222 : Tag: DATE, invalid date: 1130/1131, line ignored.
+Line 18576 : Tag: DATE, invalid date: 1556/1557, line ignored.
+Line 26175 : Tag: DATE, invalid date: 1380/1381, line ignored.
+
+Step 3:
+
+
